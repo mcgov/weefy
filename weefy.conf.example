@@ -1,0 +1,11 @@
+# weefy.conf: goes in the same directory as the program on the EFI System
+# Partition (\EFI\BOOT\ when weefy is the default loader).
+
+# Boot the OS by itself after this many seconds unless a key is pressed.
+# Leave it out, or set 0, and weefy waits for you.
+timeout=10
+
+# Which OS to boot: the first whose title or path contains this text, or a
+# boot option by its variable name (Boot0003). Leave it out for the first
+# usable entry of BootOrder, then the first loader found on a disk.
+default=fedora

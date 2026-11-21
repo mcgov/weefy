@@ -1,0 +1,22 @@
+[package]
+name = "weefy"
+version = "0.1.0"
+edition = "2024"
+description = "A boot-time UEFI explorer: learn UEFI on the machine in front of you, then boot your OS"
+
+[[bin]]
+name = "weefy"
+test = false
+bench = false
+
+[dependencies]
+uefi = { version = "0.41", features = ["alloc", "global_allocator"] }
+uefi-raw = "0.17"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = true
