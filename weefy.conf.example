@@ -9,3 +9,7 @@ timeout=10
 # boot option by its variable name (Boot0003). Leave it out for the first
 # usable entry of BootOrder, then the first loader found on a disk.
 default=fedora
+
+# When the intro plays: auto (until "[skip dialogue]" is chosen from the
+# menu; this is what you get without the line), off (never) or always.
+intro=auto

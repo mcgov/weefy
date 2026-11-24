@@ -519,25 +519,6 @@ fn remove_page(doc: &mut Doc) {
 
 // ------------------------------------------------------------------ actions
 
-fn notice(scr: &mut Screen, title: &str, lines: &[(tui::Style, String)]) -> Key {
-    tui::message(
-        scr,
-        title,
-        &|w| {
-            let mut d = Doc::new(w);
-            for (style, text) in lines {
-                if text.is_empty() {
-                    d.blank();
-                } else {
-                    d.styled(*style, text);
-                }
-            }
-            d
-        },
-        &[("Any key", "Continue")],
-    )
-}
-
 fn set_failure(status: Status) -> String {
     match status {
         Status::SECURITY_VIOLATION => String::from("SECURITY_VIOLATION: the firmware rejected the update's signature or timestamp"),
@@ -569,7 +550,7 @@ fn enroll(scr: &mut Screen) {
     let m = mode();
     let files: Vec<Option<Vec<u8>>> = ["db", "KEK", "PK"].iter().map(|n| key_file(n)).collect();
     if !m.present || !m.setup || files.iter().any(|f| f.is_none()) {
-        notice(scr, "Can't enrol", &[(st::NORMAL, String::from("The page on the right says why: the machine must be in Setup Mode and db.auth, KEK.auth and PK.auth must be in the keys directory."))]);
+        tui::notice(scr, "Can't enrol", &[(st::NORMAL, String::from("The page on the right says why: the machine must be in Setup Mode and db.auth, KEK.auth and PK.auth must be in the keys directory."))]);
         return;
     }
     // Would this program still be let in afterwards?
@@ -634,12 +615,12 @@ fn enroll(scr: &mut Screen) {
             }),
         ));
     }
-    notice(scr, "Enrolling", &lines);
+    tui::notice(scr, "Enrolling", &lines);
 }
 
 fn remove_pk(scr: &mut Screen) {
     let Some(auth) = key_file("noPK").filter(|_| pk_is_ours()) else {
-        notice(scr, "Can't remove it", &[(st::NORMAL, String::from("The platform key isn't the lab's, or keys\\noPK.auth is missing."))]);
+        tui::notice(scr, "Can't remove it", &[(st::NORMAL, String::from("The platform key isn't the lab's, or keys\\noPK.auth is missing."))]);
         return;
     };
     let key = tui::message(
@@ -666,7 +647,7 @@ fn remove_pk(scr: &mut Screen) {
         }
         Err(e) => (st::BAD, set_failure(e.status())),
     };
-    notice(scr, "Removing the platform key", &[line]);
+    tui::notice(scr, "Removing the platform key", &[line]);
 }
 
 /// Starts an image this program loaded as "stage two": a copy of itself that
@@ -686,7 +667,7 @@ fn start_stage2(scr: &mut Screen, image: uefi::Handle) {
         Ok(()) => Status::SUCCESS,
         Err(e) => e.status(),
     };
-    notice(
+    tui::notice(
         scr,
         "Back in stage one",
         &[(st::NORMAL, format!("Stage two exited with {}, and StartImage() returned here.", bootopt::status_text(status)))],
@@ -696,7 +677,7 @@ fn start_stage2(scr: &mut Screen, image: uefi::Handle) {
 fn try_load(scr: &mut Screen, index: usize) {
     let (file, _, _) = LAB[index];
     let Some(data) = util::read_own_file(&format!("lab\\{file}")) else {
-        notice(scr, "Not there", &[(st::NORMAL, format!("lab\\{file} isn't on this disk."))]);
+        tui::notice(scr, "Not there", &[(st::NORMAL, format!("lab\\{file} isn't on this disk."))]);
         return;
     };
     let m = mode();
@@ -767,7 +748,7 @@ fn try_load(scr: &mut Screen, index: usize) {
             } else {
                 lines.push((st::BAD, format!("LoadImage() failed with {status:?}, which is not a Secure Boot refusal.")));
             }
-            notice(scr, "LoadImage() refused", &lines);
+            tui::notice(scr, "LoadImage() refused", &lines);
         }
     }
 }

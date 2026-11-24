@@ -13,6 +13,7 @@ KEYS="$REPO/keys"
 MONITOR=""
 TIMEOUT_CONF=""
 DEFAULT_CONF=""
+INTRO_CONF=""
 MEM=1G
 OUT="$REPO/target/qemu"
 FW_DIR=/usr/share/edk2
@@ -36,6 +37,11 @@ Usage: $0 [options]
   --monitor <socket>       put the QEMU monitor on this unix socket
   --conf-timeout <secs>    write weefy.conf with timeout=<secs>
   --conf-default <text>    write weefy.conf with default=<text>
+  --conf-intro <auto|off|always>
+                           write weefy.conf with intro=<when>: off to go
+                           straight to the menu, always to play the intro
+                           every time                         (default: no line; the
+                                                              intro plays until skipped)
   --mem <size>             guest memory                       (default: $MEM)
   --out <dir>              where the disk contents and firmware variables go
                                                               (default: $OUT)
@@ -56,6 +62,7 @@ while [[ $# -gt 0 ]]; do
         --monitor) MONITOR="$2"; shift 2 ;;
         --conf-timeout) TIMEOUT_CONF="$2"; shift 2 ;;
         --conf-default) DEFAULT_CONF="$2"; shift 2 ;;
+        --conf-intro) INTRO_CONF="$2"; shift 2 ;;
         --mem) MEM="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --firmware-dir) FW_DIR="$2"; shift 2 ;;
@@ -82,6 +89,7 @@ case "$ARCH" in
     *) die "--arch must be aarch64 or x86_64" ;;
 esac
 [[ "$DISPLAY_MODE" =~ ^(gtk|none|serial)$ ]] || die "--display must be gtk, none or serial"
+[[ -z "$INTRO_CONF" || "$INTRO_CONF" =~ ^(auto|off|always)$ ]] || die "--conf-intro must be auto, off or always"
 for f in "$CODE" "$VARS"; do
     [[ -f "$f" ]] || die "$f not found (install edk2-ovmf / edk2-aarch64, or pass --firmware-dir)"
 done
@@ -101,10 +109,18 @@ if [[ "$SECURE_BOOT" == 1 ]]; then
     EFI="$work/lab/weefy-signed.efi"
 fi
 cp "$EFI" "$work/esp/EFI/BOOT/BOOT$SUFFIX.EFI"
-if [[ -n "$TIMEOUT_CONF$DEFAULT_CONF" ]]; then
+# Sample capsules for the Capsules screen to take apart; a signed one too if
+# the library that signs is there.
+if command -v python3 >/dev/null; then
+    capsule_args=(--out "$work/esp/EFI/BOOT/capsules")
+    python3 -c 'import cryptography' 2>/dev/null && capsule_args+=(--sign)
+    python3 "$REPO/tools/mkcapsule.py" "${capsule_args[@]}"
+fi
+if [[ -n "$TIMEOUT_CONF$DEFAULT_CONF$INTRO_CONF" ]]; then
     {
         [[ -z "$TIMEOUT_CONF" ]] || echo "timeout=$TIMEOUT_CONF"
         [[ -z "$DEFAULT_CONF" ]] || echo "default=$DEFAULT_CONF"
+        [[ -z "$INTRO_CONF" ]] || echo "intro=$INTRO_CONF"
     } > "$work/esp/EFI/BOOT/weefy.conf"
 fi
 # The variable store: a blank one unless the last run's is wanted. One per

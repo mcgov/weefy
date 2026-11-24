@@ -120,6 +120,16 @@ fn other_about(name: &str, vendor: &Guid) -> &'static str {
             _ => "",
         };
     }
+    if *vendor == crate::intro::WEEFY_VARS && name == crate::intro::SKIP_VAR {
+        return "Set to 1 by \"[skip dialogue]\" on weefy's main menu: the intro doesn't play at the start. Choosing it again removes the variable.";
+    }
+    if *vendor == crate::capsule::CAPSULE_REPORT {
+        return match name {
+            "CapsuleMax" => "The highest-numbered capsule result variable this firmware will write before it starts again at Capsule0000.",
+            "CapsuleLast" => "The name of the newest capsule result variable.",
+            _ => "The firmware's report on one capsule it processed: which, when, and how it went.",
+        };
+    }
     match name {
         "MokList" | "MokListRT" => "shim's Machine Owner Keys: certificates the machine's owner enrolled, trusted for kernels and modules in addition to the distribution's own.",
         "MokListX" | "MokListXRT" => "shim's revocation list.",
@@ -303,6 +313,9 @@ fn decode(doc: &mut Doc, name: &str, vendor: &Guid, data: &[u8]) {
             "bit 6: start platform recovery",
             "bit 7: refresh JSON configuration data",
         ]);
+    } else if *vendor == crate::capsule::CAPSULE_REPORT {
+        doc.h("Decoded");
+        crate::capsule::result_var(doc, name, data);
     } else if global && name == "BootOptionSupport" {
         doc.h("Decoded");
         let v = util::rd32(data, 0).unwrap_or(0) as u64;

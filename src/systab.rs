@@ -20,7 +20,7 @@ const CONFORMANCE_GUID: Guid = guid!("36122546-f7e7-4c8f-bd9b-eb8525b50c0b");
 ///
 /// # Safety
 /// `addr..addr+len` must be memory the firmware has mapped.
-unsafe fn peek(addr: usize, len: usize) -> &'static [u8] {
+pub unsafe fn peek(addr: usize, len: usize) -> &'static [u8] {
     unsafe { core::slice::from_raw_parts(addr as *const u8, len) }
 }
 
@@ -201,6 +201,10 @@ fn config_table(doc: &mut Doc, g: &Guid, addr: usize) {
                 doc.kv("Version", format!("{:#x}", util::rd32(e, 20).unwrap_or(0)));
                 doc.kv("Lowest allowed", format!("{:#x}", util::rd32(e, 24).unwrap_or(0)));
             }
+            doc.blank();
+            doc.dim("The Capsules screen shows each component in full, beside what the Firmware Management Protocol says about it.");
+        } else if *g == crate::capsule::LAB_CAPSULE {
+            crate::capsule::landed_page(doc);
         } else if *g == CONFORMANCE_GUID {
             let t = peek(addr, 4);
             let count = (util::rd16(t, 2).unwrap_or(0) as usize).min(16);

@@ -950,3 +950,23 @@ pub fn message(scr: &mut Screen, title: &str, doc_for: &dyn Fn(usize) -> Doc, hi
     drain_keys();
     read_key()
 }
+
+/// A message box of plain lines, each with a style; an empty one is a gap.
+pub fn notice(scr: &mut Screen, title: &str, lines: &[(Style, String)]) -> Key {
+    message(
+        scr,
+        title,
+        &|w| {
+            let mut d = Doc::new(w);
+            for (style, text) in lines {
+                if text.is_empty() {
+                    d.blank();
+                } else {
+                    d.styled(*style, text);
+                }
+            }
+            d
+        },
+        &[("Any key", "Continue")],
+    )
+}

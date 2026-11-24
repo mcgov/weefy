@@ -6,13 +6,17 @@
 
 extern crate alloc;
 
+mod art;
 mod bootopt;
 mod bootview;
+mod capsule;
 mod guid_names;
 mod guids;
 mod handles;
+mod intro;
 mod learn;
 mod memmap;
+mod pixel;
 mod secboot;
 mod services;
 mod systab;
@@ -65,6 +69,17 @@ struct Config {
     timeout: u32,
     /// Part of the title or path of the target to boot by default.
     default: Option<String>,
+    /// When the intro plays.
+    intro: Intro,
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+enum Intro {
+    /// Until the user chooses "[skip dialogue]".
+    #[default]
+    Auto,
+    Off,
+    Always,
 }
 
 fn load_config() -> Config {
@@ -83,6 +98,13 @@ fn load_config() -> Config {
         match name.trim() {
             "timeout" => config.timeout = value.trim().parse().unwrap_or(0).min(3600),
             "default" => config.default = Some(value.trim().to_string()).filter(|s| !s.is_empty()),
+            "intro" => {
+                config.intro = match value.trim() {
+                    "off" => Intro::Off,
+                    "always" => Intro::Always,
+                    _ => Intro::Auto,
+                }
+            }
             _ => {}
         }
     }
@@ -117,6 +139,8 @@ fn countdown(scr: &mut Screen, title: &str, seconds: u32) -> bool {
 #[derive(Clone, Copy)]
 enum Act {
     BootDefault,
+    Intro,
+    SkipIntro,
     Tour,
     SystemTable,
     BootServices,
@@ -127,6 +151,7 @@ enum Act {
     Memory,
     Console,
     SecureBoot,
+    Capsules,
     Boot,
 }
 
@@ -154,6 +179,31 @@ fn menu_page(doc: &mut Doc, act: Act, config: &Config) {
                     doc.p("No boot option other than this program resolves to a device that is present, and no file system has a loader under \\EFI. The Boot screen shows what was looked at, and lets you hand control back to the firmware.");
                 }
             }
+        }
+        Act::Intro => {
+            doc.p("Dr. Weefy Fulgens welcomes you to his lab: a logo screen and a few lines of dialogue, in which he checks whether you brought an operating system.");
+            doc.blank();
+            doc.p("It is drawn straight into the firmware's framebuffer with the Graphics Output Protocol, 320 by 200 in 16 colours, scaled up to fit. On a serial console the same lines come as text.");
+            doc.blank();
+            doc.dim("Any key moves it on; Esc leaves it.");
+        }
+        Act::SkipIntro => {
+            doc.p("Whether the intro plays when weefy starts. Enter changes it.");
+            doc.blank();
+            let set = intro::skip_is_set();
+            doc.kv("At the start", match (config.intro, set) {
+                (Intro::Off, _) => "the intro doesn't play: weefy.conf says intro=off",
+                (Intro::Always, _) => "the intro plays: weefy.conf says intro=always",
+                (Intro::Auto, true) => "the intro doesn't play",
+                (Intro::Auto, false) => "the intro plays",
+            });
+            doc.blank();
+            doc.p("The choice is kept in a UEFI variable, the firmware's own settings store, so it lasts across restarts and power-offs. The Variables screen shows it once it is there.");
+            doc.kv("Variable", intro::SKIP_VAR);
+            doc.kv("Namespace", format!("{}", intro::WEEFY_VARS));
+            doc.kv("Now", if set { "1: skip" } else { "absent: play" });
+            doc.blank();
+            doc.dim("Some firmware forgets its variables at power-off. There, put intro=off in weefy.conf, beside the program.");
         }
         Act::Tour => {
             doc.p("Thirteen short lessons on how UEFI works: what the firmware does between power-on and your OS, and the handful of ideas (tables, handles, protocols, variables, device paths) everything is built from.");
@@ -222,6 +272,13 @@ fn menu_page(doc: &mut Doc, act: Act, config: &Config) {
             doc.kv("SetupMode", flag_text("SetupMode"));
             doc.kv("SecureBoot", flag_text("SecureBoot"));
         }
+        Act::Capsules => {
+            doc.p("How firmware gets updated: the capsule services, the table of updatable components (ESRT), the Firmware Management Protocol behind it, and the result variables the firmware leaves afterwards.");
+            doc.blank();
+            doc.p("It also reads capsule files found on this disk and shows their structure without submitting them, and can send one harmless test capsule to watch it cross a reset.");
+            doc.blank();
+            doc.kv("Components", capsule::summary());
+        }
         Act::Boot => {
             doc.p("Everything that can be started: the firmware's boot options in BootOrder's order, and loaders found by searching the disks. Each shows the device path it stores and what that resolves to on this boot.");
             doc.blank();
@@ -265,39 +322,51 @@ fn main() -> Status {
         }
     }
 
+    // The first time, and until asked not to: the intro.
+    let wanted = match config.intro {
+        Intro::Off => false,
+        Intro::Always => true,
+        Intro::Auto => !intro::skip_is_set(),
+    };
+    if wanted && !stage2 {
+        intro::play(&mut scr, config.default.as_deref());
+    }
+
     let boot_label = match bootview::default_title(config.default.as_deref()) {
         Some(title) => format!("Boot {title}"),
         None => String::from("Boot the OS (none found)"),
     };
-    let menu: [(Option<Act>, String); 16] = [
-        (None, "Start here".into()),
-        (Some(Act::Tour), "Take the tour".into()),
-        (None, "This machine".into()),
-        (Some(Act::SystemTable), "System table".into()),
-        (Some(Act::BootServices), "Boot services".into()),
-        (Some(Act::RuntimeServices), "Runtime services".into()),
-        (Some(Act::Handles), "Handles".into()),
-        (Some(Act::Protocols), "Protocols".into()),
-        (Some(Act::Variables), "Variables".into()),
-        (Some(Act::Memory), "Memory map".into()),
-        (Some(Act::Console), "Console".into()),
-        (None, "Try it".into()),
-        (Some(Act::SecureBoot), "Secure Boot lab".into()),
-        (None, "When you are done".into()),
-        (Some(Act::BootDefault), boot_label),
-        (Some(Act::Boot), "Boot something else, or leave".into()),
-    ];
-    let items: Vec<Item> = menu
-        .iter()
-        .map(|(act, label)| match act {
-            None => Item::header(label.clone()),
-            Some(Act::BootDefault) => Item::new(label.clone()).styled(st::GOOD),
-            Some(_) => Item::new(label.clone()),
-        })
-        .collect();
-
     let mut state = BrowseState::default();
     loop {
+        let menu: [(Option<Act>, String); 19] = [
+            (None, "Start here".into()),
+            (Some(Act::Tour), "Take the tour".into()),
+            (Some(Act::Intro), "Meet Dr. Weefy".into()),
+            (Some(Act::SkipIntro), format!("[skip dialogue] {}", if intro::skip_is_set() { "yes" } else { "no" })),
+            (None, "This machine".into()),
+            (Some(Act::SystemTable), "System table".into()),
+            (Some(Act::BootServices), "Boot services".into()),
+            (Some(Act::RuntimeServices), "Runtime services".into()),
+            (Some(Act::Handles), "Handles".into()),
+            (Some(Act::Protocols), "Protocols".into()),
+            (Some(Act::Variables), "Variables".into()),
+            (Some(Act::Memory), "Memory map".into()),
+            (Some(Act::Console), "Console".into()),
+            (None, "Try it".into()),
+            (Some(Act::SecureBoot), "Secure Boot lab".into()),
+            (Some(Act::Capsules), "Capsules and firmware updates".into()),
+            (None, "When you are done".into()),
+            (Some(Act::BootDefault), boot_label.clone()),
+            (Some(Act::Boot), "Boot something else, or leave".into()),
+        ];
+        let items: Vec<Item> = menu
+            .iter()
+            .map(|(act, label)| match act {
+                None => Item::header(label.clone()),
+                Some(Act::BootDefault) => Item::new(label.clone()).styled(st::GOOD),
+                Some(_) => Item::new(label.clone()),
+            })
+            .collect();
         let hints: &[(&str, &str)] = if stage2 { &[] } else { &[("b", "Boot OS")] };
         let crumbs = if stage2 { "Home of stage two (Esc returns to stage one)" } else { "Home" };
         let out = tui::browse(&mut scr, &mut state, crumbs, "weefy", &items, hints, &mut |row, width| {
@@ -321,6 +390,20 @@ fn main() -> Status {
         };
         match act {
             Some(Act::Tour) => learn::run(&mut scr),
+            Some(Act::Intro) => intro::play(&mut scr, config.default.as_deref()),
+            Some(Act::SkipIntro) => {
+                if let Err(e) = intro::set_skip(!intro::skip_is_set()) {
+                    tui::notice(
+                        &mut scr,
+                        "The firmware wouldn't keep it",
+                        &[
+                            (st::BAD, format!("SetVariable() returned {:?}.", e.status())),
+                            (st::NORMAL, String::new()),
+                            (st::NORMAL, String::from("This firmware can't store the choice. Put intro=off in weefy.conf, beside the program, to do the same.")),
+                        ],
+                    );
+                }
+            }
             Some(Act::SystemTable) => systab::run(&mut scr),
             Some(Act::BootServices) => services::run_boot(&mut scr),
             Some(Act::RuntimeServices) => services::run_runtime(&mut scr),
@@ -330,6 +413,7 @@ fn main() -> Status {
             Some(Act::Memory) => memmap::run(&mut scr),
             Some(Act::Console) => memmap::run_console(&mut scr),
             Some(Act::SecureBoot) => secboot::run(&mut scr),
+            Some(Act::Capsules) => capsule::run(&mut scr),
             Some(Act::BootDefault) => {
                 let targets = bootopt::targets();
                 match bootopt::default_target(&targets, config.default.as_deref()) {

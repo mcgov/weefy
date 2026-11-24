@@ -19,6 +19,7 @@ OUT="$REPO/target/image"
 ESP_MB=64
 CONF_TIMEOUT=""
 CONF_DEFAULT=""
+CONF_INTRO=""
 WRITE=""
 SECURE_BOOT=0
 KEYS="$REPO/keys"
@@ -48,6 +49,10 @@ Usage: $0 [options]
   --conf-default <text>     put weefy.conf on the ESP: the OS to boot is the
                             one whose title or path contains this text
                                                               (default: first in BootOrder)
+  --conf-intro <auto|off|always>
+                            put weefy.conf on the ESP: off to go straight to
+                            the menu, always to play the intro every time
+                                                              (default: the intro plays until skipped)
   --secure-boot             sign weefy and add the Secure Boot lab's files:
                             the key updates and three test images
   --keys <dir>              the Secure Boot keys; made on first use. The
@@ -70,6 +75,7 @@ while [[ $# -gt 0 ]]; do
         --esp-mb) ESP_MB="$2"; shift 2 ;;
         --conf-timeout) CONF_TIMEOUT="$2"; shift 2 ;;
         --conf-default) CONF_DEFAULT="$2"; shift 2 ;;
+        --conf-intro) CONF_INTRO="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --secure-boot) SECURE_BOOT=1; shift ;;
         --keys) KEYS="$2"; shift 2 ;;
@@ -85,6 +91,7 @@ die() { echo "error: $*" >&2; exit 1; }
 step() { echo; echo "=== $* ==="; }
 
 [[ "$BOARD" =~ ^(none|orangepi5-ultra)$ ]] || die "--board must be none or orangepi5-ultra"
+[[ -z "$CONF_INTRO" || "$CONF_INTRO" =~ ^(auto|off|always)$ ]] || die "--conf-intro must be auto, off or always"
 [[ "$BOARD" == orangepi5-ultra ]] && ARCH=aarch64
 case "$ARCH" in
     aarch64) SUFFIX=AA64 ;;
@@ -123,6 +130,17 @@ if [[ "$SECURE_BOOT" == 1 ]]; then
     EFI="$LAB/weefy-signed.efi"
 fi
 
+step "sample capsules for the Capsules screen"
+CAPSULES="$OUT/capsules"
+rm -rf "$CAPSULES"
+if command -v python3 >/dev/null; then
+    capsule_args=(--out "$CAPSULES")
+    python3 -c 'import cryptography' 2>/dev/null && capsule_args+=(--sign)
+    python3 "$REPO/tools/mkcapsule.py" "${capsule_args[@]}"
+else
+    echo ">> python3 not found: no sample capsules"
+fi
+
 step "EFI System Partition"
 ESP="$OUT/weefy-esp-$ARCH.img"
 rm -f "$ESP"
@@ -133,11 +151,15 @@ mcopy -i "$ESP" "$EFI" "::/EFI/BOOT/BOOT$SUFFIX.EFI"
 if [[ "$SECURE_BOOT" == 1 ]]; then
     mcopy -s -i "$ESP" "$LAB/keys" "$LAB/lab" ::/EFI/BOOT/
 fi
-if [[ -n "$CONF_TIMEOUT$CONF_DEFAULT" ]]; then
+if [[ -d "$CAPSULES" ]]; then
+    mcopy -s -i "$ESP" "$CAPSULES" ::/EFI/BOOT/
+fi
+if [[ -n "$CONF_TIMEOUT$CONF_DEFAULT$CONF_INTRO" ]]; then
     conf="$(mktemp)"
     {
         [[ -z "$CONF_TIMEOUT" ]] || echo "timeout=$CONF_TIMEOUT"
         [[ -z "$CONF_DEFAULT" ]] || echo "default=$CONF_DEFAULT"
+        [[ -z "$CONF_INTRO" ]] || echo "intro=$CONF_INTRO"
     } > "$conf"
     mcopy -i "$ESP" "$conf" ::/EFI/BOOT/weefy.conf
     rm -f "$conf"

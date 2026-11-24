@@ -189,6 +189,8 @@ pub fn extra(guid: &Guid) -> Option<(&'static str, &'static str)> {
         (guid!("b7799cb0-eca2-4943-9667-1fae07b747fa"), "Linux TPM event log table", "The TPM event log, copied by the Linux EFI stub before it leaves boot services."),
         (guid!("888eb0c6-8ede-4ff5-a8f0-9aee5cb977c2"), "Linux memreserve table", "Memory the Linux kernel must keep reserved across kexec."),
         (guid!("c451ed2b-9694-45d3-baba-ed9f8988a389"), "Linux MOK variable table", "shim's machine owner keys, passed to the Linux kernel as a table."),
+        (guid!("041ed577-1392-406e-9c7f-ffd38fc9f11a"), "weefy", "This program's own namespace. SkipIntro is here once \"[skip dialogue]\" has been chosen from the main menu."),
+        (guid!("6da511a3-64c4-443d-adc5-69780db26f9c"), "weefy test capsule", "The capsule this program's Capsules screen sends. The firmware kept it in memory across a reset and published it here, because its header asked for that."),
         (guid!("77fa9abd-0359-4d32-bd60-28f4e78f784b"), "Microsoft", "Microsoft's owner GUID: it marks the Secure Boot certificates Microsoft supplied."),
     ];
     EXTRA.iter().find(|e| e.0 == *guid).map(|e| (e.1, e.2))

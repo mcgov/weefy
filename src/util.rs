@@ -189,25 +189,27 @@ pub fn own_location() -> Option<(Handle, String)> {
 /// subdirectories, separated by backslashes).
 pub fn read_own_file(name: &str) -> Option<Vec<u8>> {
     let (device, dir) = own_location()?;
+    // Nothing this program reads from beside itself is larger.
+    let (data, size) = read_file(device, &format!("{dir}\\{name}"), 16 << 20)?;
+    (data.len() as u64 == size).then_some(data)
+}
+
+/// The first `max` bytes of a file on a device's file system (`path` from
+/// its root), and the file's full size.
+pub fn read_file(device: Handle, path: &str, max: usize) -> Option<(Vec<u8>, u64)> {
     let mut fs = open::<SimpleFileSystem>(device)?;
     let mut root = fs.open_volume().ok()?;
-    let mut file = root
-        .open(&cstring16(&format!("{dir}\\{name}")), FileMode::Read, FileAttribute::empty())
-        .ok()?
-        .into_regular_file()?;
-    let size = file.get_boxed_info::<FileInfo>().ok()?.file_size() as usize;
-    // Nothing this program reads is larger.
-    if size > 16 << 20 {
-        return None;
-    }
-    let mut buf = alloc::vec![0u8; size];
+    let mut file = root.open(&cstring16(path), FileMode::Read, FileAttribute::empty()).ok()?.into_regular_file()?;
+    let size = file.get_boxed_info::<FileInfo>().ok()?.file_size();
+    let want = size.min(max as u64) as usize;
+    let mut buf = alloc::vec![0u8; want];
     let mut got = 0;
-    while got < size {
+    while got < want {
         match file.read(&mut buf[got..]) {
             Ok(0) | Err(_) => break,
             Ok(n) => got += n,
         }
     }
     buf.truncate(got);
-    Some(buf)
+    Some((buf, size))
 }
