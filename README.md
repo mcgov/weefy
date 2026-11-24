@@ -4,12 +4,10 @@ An educational UEFI application.
 Enter the hidden world before ExitBootServices().
 Boot it on your machine to see what the firmware offers your OS.
 
+![The intro's logo screen in QEMU: "Weefy teaches UEFI, with Dr. Weefy Fulgens", a pixel-art red panda in a lab coat waving from behind a lab bench](docs/intro.png)
+
 It is a text UI in the firmware's own console (a display or a serial port):
 
-- **The intro**: on the first run, a cartoon. "Weefy teaches UEFI, with
-  Dr. Weefy Fulgens": a red panda in a lab coat welcomes you and checks
-  whether you brought an operating system. Any key moves it on, Esc leaves
-  it, and `[skip dialogue]` on the main menu stops it playing again.
 - **Take the tour**: thirteen short lessons, each ending with facts read from
   this machine.
 - **System table**: the header, the console, and every configuration table,
