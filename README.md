@@ -2,7 +2,10 @@
 
 An educational UEFI application. 
 Enter the hidden world before ExitBootServices().
-Boot it on your machine to see what the firmware offers your OS.
+Boot it to see what the firmware offers your OS.
+
+> **Note:** weefy is for educational purposes only. Do not use it on machines
+> that contain important data or anything else that you care about.
 
 ![The intro's logo screen in QEMU: "Weefy teaches UEFI, with Dr. Weefy Fulgens", a pixel-art red panda in a lab coat waving from behind a lab bench](docs/intro.png)
 
